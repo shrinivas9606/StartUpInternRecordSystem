@@ -2,23 +2,21 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
-import QRCode from "react-qr-code";
 
-// Import template components
+// Templates
 import Template1 from "../templates/Template1";
 import Template2 from "../templates/Template2";
-import Template3 from "../templates/Template3"; // ✅ Add this
+import Template3 from "../templates/Template3";
 
 export default function VerifyCertificate() {
-  const { id } = useParams(); // certId from URL
+  const { id } = useParams();
   const [certificate, setCertificate] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Template mapping
   const templateMap = {
     template1: Template1,
     template2: Template2,
-    template3: Template3, // ✅ Map here
+    template3: Template3,
   };
 
   useEffect(() => {
@@ -26,9 +24,10 @@ export default function VerifyCertificate() {
       try {
         const q = query(collection(db, "interns"), where("certId", "==", id));
         const snapshot = await getDocs(q);
-
         if (!snapshot.empty) {
-          setCertificate(snapshot.docs[0].data());
+          const data = snapshot.docs[0].data();
+          data.certLink = window.location.href; // attach cert link for QR
+          setCertificate(data);
         } else {
           setCertificate(null);
         }
@@ -43,31 +42,69 @@ export default function VerifyCertificate() {
     fetchCertificate();
   }, [id]);
 
-  if (loading) return <div className="text-center mt-10">Loading...</div>;
+  const handlePrint = () => {
+    const printContents = document.getElementById("certificate-container").innerHTML;
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Certificate Print</title>
+          <style>
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; font-family: serif; }
+          </style>
+        </head>
+        <body>${printContents}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
 
-  if (!certificate)
-    return <div className="text-center mt-10 text-red-500">❌ Invalid Certificate ID</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-center text-lg font-medium text-slate-600">Verifying certificate...</div>
+      </div>
+    );
+  }
+
+  if (!certificate) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-100">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-red-600">Certificate Not Found</h2>
+          <p className="text-red-500 mt-2">Invalid certificate ID: {id}</p>
+        </div>
+      </div>
+    );
+  }
 
   const SelectedTemplate = templateMap[certificate.template];
 
   return (
-    <div className="max-w-4xl mx-auto mt-10 p-6">
-      <h2 className="text-xl font-bold text-center mb-6">✅ Certificate Verified</h2>
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-300 py-10">
+      <div className="text-center mb-6">
+        <h1 className="text-4xl font-bold text-slate-800">Certificate Verification</h1>
+        <p className="text-slate-600">This certificate is verified and authentic</p>
+      </div>
 
-      <div className="bg-white p-4 shadow rounded">
+      <div id="certificate-container" className="flex justify-center px-4">
         {SelectedTemplate ? (
-          <SelectedTemplate data={certificate} />
+          <SelectedTemplate data={certificate} verificationUrl={window.location.href} />
         ) : (
-          <p className="text-red-600">No template found.</p>
+          <p className="text-red-500">No template selected for rendering</p>
         )}
       </div>
 
-      <div className="mt-6 text-center">
-        <QRCode value={window.location.href} />
-        <p className="text-sm mt-2 text-gray-600">Scan to verify</p>
+      <div className="text-center mt-6 print:hidden">
         <button
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
-          onClick={() => window.print()}
+          onClick={handlePrint}
+          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 shadow"
         >
           🖨️ Print Certificate
         </button>
